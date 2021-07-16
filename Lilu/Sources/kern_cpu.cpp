@@ -32,6 +32,8 @@ void CPUInfo::init() {
 
 	getCpuid(0x80000000, 0, &bdi.cpuMaxLevelExt);
 
+	bdi.cpuHasAvx2 = getCpuid(7, 0, nullptr, &b) && (b & CPUInfo::bit_AVX2) != 0;
+
 	// Only do extended model checking on Intel or when unsupported.
 	if (bdi.cpuVendor != CpuVendor::Intel || bdi.cpuMaxLevel < 1)
 		return;
@@ -122,6 +124,12 @@ void CPUInfo::init() {
 			case CPU_MODEL_COMETLAKE_Y:
 			case CPU_MODEL_COMETLAKE_U:
 				bdi.cpuGeneration = CpuGeneration::CometLake;
+				break;
+			case CPU_MODEL_ROCKETLAKE_S:
+				bdi.cpuGeneration = CpuGeneration::RocketLake;
+				break;
+			case CPU_MODEL_TIGERLAKE_U:
+				bdi.cpuGeneration = CpuGeneration::TigerLake;
 				break;
 			default:
 				bdi.cpuGeneration = CpuGeneration::Unknown;

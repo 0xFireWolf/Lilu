@@ -10,24 +10,16 @@
 #include <Headers/kern_user.hpp>
 #include <Headers/kern_cpu.hpp>
 #include <Headers/kern_file.hpp>
+#include <Headers/kern_devinfo.hpp>
 #include <PrivateHeaders/kern_config.hpp>
 
 #include <mach/vm_map.h>
 #include <mach-o/fat.h>
 #include <kern/task.h>
+#include <kern/cs_blobs.h>
 #include <sys/vm.h>
 
 static UserPatcher *that {nullptr};
-
-// kern/cs_blobs.h is not available in older Xcode SDK, provide the declarations ourselves.
-#ifndef CS_ENFORCEMENT
-#define CS_INVALID_ALLOWED          0x00000020  /* (macOS Only) Page invalidation allowed by task port policy */
-#define CS_HARD                     0x00000100  /* don't load invalid pages */
-#define CS_KILL                     0x00000200  /* kill process if it becomes invalid */
-#define CS_ENFORCEMENT              0x00001000  /* require enforcement */
-#define CS_KILLED                   0x01000000  /* was killed by kernel for invalidity */
-#define CS_DEBUGGED                 0x10000000  /* process is currently or has previously been debugged and allowed to run with invalid pages */
-#endif
 
 struct procref {
 	LIST_ENTRY(proc) p_list; /* List of all processes. */
@@ -112,7 +104,7 @@ int UserPatcher::execListener(kauth_cred_t, void *idata, kauth_action_t action, 
 
 bool UserPatcher::init(KernelPatcher &kernelPatcher, bool preferSlowMode) {
 	if (ADDPR(config).isUserDisabled) {
-		SYSLOG("user", "disabling user patcher on request!");
+		SYSLOG_COND(ADDPR(debugEnabled), "user", "disabling user patcher on request!");
 		return true;
 	}
 
@@ -765,9 +757,11 @@ bool UserPatcher::loadDyldSharedCacheMapping() {
 
 	uint8_t *buffer {nullptr};
 	size_t bufferSize {0};
-	uint32_t ebx = 0;
-	if (CPUInfo::getCpuid(7, 0, nullptr, &ebx) && (ebx & CPUInfo::bit_AVX2) &&
-		getKernelVersion() >= KernelVersion::Yosemite) {
+	bool isHaswell = BaseDeviceInfo::get().cpuHasAvx2;
+	if (getKernelVersion() >= KernelVersion::BigSur) {
+		buffer = FileIO::readFileToBuffer(isHaswell ? bigSurSharedCacheMapHaswell : bigSurSharedCacheMapLegacy, bufferSize);
+	}
+	else if (isHaswell && getKernelVersion() >= KernelVersion::Yosemite) {
 		buffer = FileIO::readFileToBuffer(SharedCacheMapHaswell, bufferSize);
 	}
 
@@ -1189,4 +1183,35 @@ bool UserPatcher::hookMemoryAccess() {
 
 void UserPatcher::activate() {
 	atomic_store_explicit(&activated, true, memory_order_relaxed);
+}
+
+const char *UserPatcher::getSharedCachePath() {
+	bool isHaswell = BaseDeviceInfo::get().cpuHasAvx2;
+	if (getKernelVersion() >= KernelVersion::BigSur)
+		return isHaswell ? bigSurSharedCacheHaswell : bigSurSharedCacheLegacy;
+	return isHaswell ? sharedCacheHaswell : sharedCacheLegacy;
+}
+
+bool UserPatcher::matchSharedCachePath(const char *path) {
+	if (getKernelVersion() >= KernelVersion::BigSur) {
+		auto len = strlen(bigSurSharedCacheLegacy);
+		if (strncmp(path, bigSurSharedCacheLegacy, len) != 0)
+			return false;
+		path += len;
+	} else {
+		auto len = strlen(sharedCacheLegacy);
+		if (strncmp(path, sharedCacheLegacy, len) != 0)
+			return false;
+		path += len;
+	}
+
+	// Allow non-haswell cache on haswell, but not otherwise.
+	if (BaseDeviceInfo::get().cpuHasAvx2 && path[0] == 'h')
+		path++;
+
+	// Skip suffix matching on macOS 12 and newer
+	if (getKernelVersion() >= KernelVersion::Monterey && path[0] == '.' && path[1] >= '1' && path[1] <= '9')
+		path += 2;
+
+	return path[0] == '\0';
 }

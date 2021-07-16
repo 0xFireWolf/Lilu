@@ -1,5 +1,35 @@
 Lilu Changelog
 ==============
+#### v1.5.4
+- Allow loading on macOS 12 without `-lilubetaall` (With adapted for macOS 12 plug-ins)
+- Added guarding for address slot usage to avoid potential kernel routing overflow
+- Allow using medium size function routing in the kernel
+- Added medium size function routing for `Long` mode as they are functionally equivalent
+- Added `matchSharedCachePath` API to support dyld cache matching on macOS 12
+- Added `_kmod` hooking for kext listening to unify kext patcher logic
+- Added zlib decompression API
+- Fixed kernel patcher support on 64-bit 10.6
+- Added new GPU switching API
+
+#### v1.5.3
+- Fixed kernel patcher support on 10.7
+
+#### v1.5.2
+- Fixed AZAL recognition as GPU audio on certain AMD platforms (thx to wkpark)
+- Added external GPU disabling API with device and kernel selection via properties
+- Added identifiers for Rocket Lake and Tiger Lake CPUs
+- Added API to disable builtin GPU (IGPU)
+- Reduced hardware presence bruteforce to a more sensible value
+
+#### v1.5.1
+- Added `lilu_os_memmem` and `lilu_os_memchr` APIs
+- Added `getSharedCachePath` API to obtain current cache path
+- Added `LIKELY`/`UNLIKELY` macros
+
+#### v1.5.0
+- Fixed Apple HDEF detection made by NVIDIA
+- Fixed race-condition in select kext detection during patching (thx to lvs1974)
+
 #### v1.4.9
 - Added the PCI GMCH Graphics Control register definition. (by 0xFireWolf)
 - Added a new API to solve multiple symbols in one shot conveniently. (by 0xFireWolf)

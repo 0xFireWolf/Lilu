@@ -591,6 +591,29 @@ public:
 		return routeMultipleShort(id, requests, N, start, size, kernelRoute, force);
 	}
 
+	/**
+	 *  Simple find and replace in kernel memory.
+	 */
+	static inline bool findAndReplace(void *data, size_t dataSize, const void *find, size_t findSize, const void *replace, size_t replaceSize) {
+		void *res;
+		if (UNLIKELY((res = lilu_os_memmem(data, dataSize, find, findSize)) != nullptr)) {
+			if (UNLIKELY(MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock) != KERN_SUCCESS)) {
+				SYSLOG("patcher", "failed to obtain write permissions for f/r");
+				return false;
+			}
+
+			lilu_os_memcpy(res, replace, replaceSize);
+
+			if (UNLIKELY(MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock) != KERN_SUCCESS)) {
+				SYSLOG("patcher", "failed to restore write permissions for f/r");
+			}
+
+			return true;
+		}
+
+		return false;
+	}
+
 private:
 	/**
 	 *  Jump type for routing
@@ -625,11 +648,12 @@ private:
 	/**
 	 *  Read previous jump destination from function
 	 *
-	 *  @param from         formerly routed function
+	 *  @param from          formerly routed function
+	 *  @param jumpType previous jump type
 	 *
 	 *  @return wrapper pointer on success or 0
 	 */
-	mach_vm_address_t readChain(mach_vm_address_t from);
+	mach_vm_address_t readChain(mach_vm_address_t from, JumpType &jumpType);
 
 	/**
 	 *  Created routed trampoline page
@@ -677,27 +701,35 @@ private:
 
 #ifdef LILU_KEXTPATCH_SUPPORT
 	/**
-	 *  Called at kext loading and unloading if kext listening is enabled
-	 */
-	static void onKextSummariesUpdated();
-
-	/**
-	 *  A pointer to loaded kext information
-	 */
-	OSKextLoadedKextSummaryHeaderAny **loadedKextSummaries {nullptr};
-
-	/**
-	 *  A pointer to kext summaries update
-	 */
-	void (*orgUpdateLoadedKextSummaries)(void) {nullptr};
-
-	/**
 	 *  Process already loaded kexts once at the start
 	 *
-	 *  @param summaries loaded kext summaries
-	 *  @param num       number of loaded kext summaries
 	 */
-	void processAlreadyLoadedKexts(OSKextLoadedKextSummaryHeaderAny *summaries, size_t num);
+	void processAlreadyLoadedKexts();
+
+	/**
+	 *  Pointer to loaded kmods for kexts
+	 */
+	kmod_info_t **kextKmods {nullptr};
+
+	/**
+	 *  Called at kext unloading if kext listening is enabled
+	 */
+	static OSReturn onOSKextUnload(void *thisKext);
+
+	/**
+	 *  A pointer to OSKext::unload()
+	 */
+	mach_vm_address_t orgOSKextUnload {};
+
+	/**
+	 *  Called at kext loading and unloading if kext listening is enabled
+	 */
+	static void onOSKextSaveLoadedKextPanicList();
+
+	/**
+	 *  A pointer to OSKext::saveLoadedKextPanicList()
+	 */
+	mach_vm_address_t orgOSKextSaveLoadedKextPanicList {};
 
 #endif /* LILU_KEXTPATCH_SUPPORT */
 
@@ -726,6 +758,11 @@ private:
 	 *  Awaiting already loaded kext list
 	 */
 	bool waitingForAlreadyLoadedKexts {false};
+
+	/**
+	 *  Flag to prevent kext processing during an unload
+	 */
+	bool isKextUnloading {false};
 
 #endif /* LILU_KEXTPATCH_SUPPORT */
 

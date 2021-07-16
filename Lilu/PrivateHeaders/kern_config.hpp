@@ -42,12 +42,12 @@ private:
 	/**
 	 * Minimal required kernel version
 	 */
-	static constexpr KernelVersion minKernel {KernelVersion::MountainLion};
+	static constexpr KernelVersion minKernel {KernelVersion::SnowLeopard};
 
 	/**
 	 * Maxmimum supported kernel version
 	 */
-	static constexpr KernelVersion maxKernel {KernelVersion::BigSur};
+	static constexpr KernelVersion maxKernel {KernelVersion::Monterey};
 
 	/**
 	 *  Set once the arguments are parsed
